@@ -24,31 +24,42 @@ jobs:
           npm install
           npm run build
 
-      - name: Setup SSH
-        run: |
-          mkdir -p $HOME/.ssh
-          printf "%s" "$SSH_KEY" | tr -d '\r' > $HOME/.ssh/id_rsa
-          chmod 600 $HOME/.ssh/id_rsa
-          echo "Host *" >> $HOME/.ssh/config
-          echo "  StrictHostKeyChecking no" >> $HOME/.ssh/config
-          echo "  UserKnownHostsFile=/dev/null" >> $HOME/.ssh/config
-          chmod 600 $HOME/.ssh/config
-        env:
-          SSH_KEY: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+      - name: Deploy frontend via SCP
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.LIGHTSAIL_IP }}
+          username: ubuntu
+          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          source: "frontend/dist/*"
+          target: "~/frontend-build"
+          strip_components: 2
 
-      - name: Deploy frontend
-        run: |
-          scp -r frontend/dist/* ubuntu@${SERVER_IP}:~/frontend-build/
-          ssh ubuntu@${SERVER_IP} "sudo rm -rf /var/www/html/* && sudo cp -r ~/frontend-build/* /var/www/html/"
-        env:
-          SERVER_IP: ${{ secrets.LIGHTSAIL_IP }}
+      - name: Deploy backend and restart
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.LIGHTSAIL_IP }}
+          username: ubuntu
+          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          script: |
+            sudo rm -rf /var/www/html/*
+            sudo cp -r ~/frontend-build/* /var/www/html/
 
-      - name: Deploy backend
-        run: |
-          scp backend/main.go backend/go.mod ubuntu@${SERVER_IP}:~/backend/
-          ssh ubuntu@${SERVER_IP} "cd ~/backend && go build -o server main.go && sudo systemctl restart backend"
-        env:
-          SERVER_IP: ${{ secrets.LIGHTSAIL_IP }}
+      - name: Copy backend files
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.LIGHTSAIL_IP }}
+          username: ubuntu
+          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          source: "backend/main.go,backend/go.mod"
+          target: "~/"
 
-      - name: Cleanup
-        run: rm -f $HOME/.ssh/id_rsa $HOME/.ssh/config
+      - name: Build and restart backend
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.LIGHTSAIL_IP }}
+          username: ubuntu
+          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          script: |
+            cd ~/backend
+            go build -o server main.go
+            sudo systemctl restart backend
