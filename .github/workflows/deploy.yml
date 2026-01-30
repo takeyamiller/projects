@@ -20,34 +20,13 @@ jobs:
           echo "HOME directory: $HOME"
           echo "SSH_KEY length: ${#SSH_KEY}"
           echo "Server IP: $SERVER_IP"
+          echo "SSH user: $SSH_USER"
         env:
-          SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KEY: ${{ secrets.LIGHTSAIL_SSH_KEY }}
           SERVER_IP: ${{ secrets.LIGHTSAIL_IP }}
+          SSH_USER: ${{ secrets.SSH_USER }}
 
-      # Step 3 — Setup SSH
+      # Step 3 — Setup SSH key
       - name: Setup SSH key
         run: |
-          mkdir -p $HOME/.ssh
-          printf "%s" "$SSH_KEY" > $HOME/.ssh/id_rsa
-          chmod 600 $HOME/.ssh/id_rsa
-          ssh-keyscan -H $SERVER_IP >> $HOME/.ssh/known_hosts
-          # Test SSH connection
-          ssh -i $HOME/.ssh/id_rsa -o StrictHostKeyChecking=no $SSH_USER@$SERVER_IP "echo SSH connection works"
-        env:
-          SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          SERVER_IP: ${{ secrets.LIGHTSAIL_IP }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-
-      # Step 4 — Deploy app
-      - name: Deploy to server
-        run: |
-          ssh -i $HOME/.ssh/id_rsa $SSH_USER@$SERVER_IP "\
-          cd $DEPLOY_PATH && \
-          git pull origin main && \
-          npm install && \
-          pm2 restart all || pm2 start server.js --name my-app \
-          "
-        env:
-          SERVER_IP: ${{ secrets.LIGHTSAIL_IP }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          mkdir -p $HOM
