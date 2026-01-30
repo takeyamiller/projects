@@ -3,14 +3,14 @@ name: Deploy to Lightsail
 on:
   push:
     branches:
-      - main  # triggers deployment on pushes to main branch
+      - main  # deploys whenever you push to main
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1 — Checkout your code
+      # Step 1 — Checkout the code
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -26,7 +26,28 @@ jobs:
           SERVER_IP: ${{ secrets.LIGHTSAIL_IP }}
           SSH_USER: ${{ secrets.SSH_USER }}
 
-      # Step 3 — Setup SSH key
+      # Step 3 — Setup SSH key and test connection
       - name: Setup SSH key
         run: |
-          mkdir -p $HOM
+          mkdir -p $HOME/.ssh
+          printf "%s" "$SSH_KEY" | tr -d '\r' > $HOME/.ssh/id_rsa
+          chmod 600 $HOME/.ssh/id_rsa
+          ssh-keyscan -H $SERVER_IP >> $HOME/.ssh/known_hosts
+          ssh -i $HOME/.ssh/id_rsa -o StrictHostKeyChecking=no $SSH_USER@$SERVER_IP "echo SSH connection works"
+        env:
+          SSH_KEY: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          SERVER_IP: ${{ secrets.LIGHTSAIL_IP }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+
+      # Step 4 — Deploy app to hardcoded folder
+      - name: Deploy to server
+        run: |
+          ssh -i $HOME/.ssh/id_rsa $SSH_USER@$SERVER_IP "\
+          cd /home/ubuntu/my-app && \
+          git pull origin main && \
+          npm install && \
+          pm2 restart all || pm2 start server.js --name my-app \
+          "
+        env:
+          SERVER_IP: ${{ secrets.LIGHTSAIL_IP }}
+          SSH_USER: ${{ secrets.SSH_USER }}
