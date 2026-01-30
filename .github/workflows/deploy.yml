@@ -3,31 +3,19 @@ name: Deploy to Lightsail
 on:
   push:
     branches:
-      - main  # deploys whenever you push to main
+      - main  # Deploy whenever you push to main
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1 — Checkout the code
-      - name: Checkout code
+      # Step 1 — Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Step 2 — Debug SSH secrets
-      - name: Debug SSH info
-        run: |
-          echo "HOME directory: $HOME"
-          echo "SSH_KEY length: ${#SSH_KEY}"
-          echo "Server IP: $SERVER_IP"
-          echo "SSH user: $SSH_USER"
-        env:
-          SSH_KEY: ${{ secrets.LIGHTSAIL_SSH_KEY }}
-          SERVER_IP: ${{ secrets.LIGHTSAIL_IP }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-
-      # Step 3 — Setup SSH key and test connection
-      - name: Setup SSH key
+      # Step 2 — Setup SSH key and test connection
+      - name: Setup SSH and test connection
         run: |
           mkdir -p $HOME/.ssh
           printf "%s" "$SSH_KEY" | tr -d '\r' > $HOME/.ssh/id_rsa
@@ -39,7 +27,7 @@ jobs:
           SERVER_IP: ${{ secrets.LIGHTSAIL_IP }}
           SSH_USER: ${{ secrets.SSH_USER }}
 
-      # Step 4 — Deploy app to hardcoded folder
+      # Step 3 — Deploy app
       - name: Deploy to server
         run: |
           ssh -i $HOME/.ssh/id_rsa $SSH_USER@$SERVER_IP "\
