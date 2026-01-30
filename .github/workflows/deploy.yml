@@ -24,42 +24,22 @@ jobs:
           npm install
           npm run build
 
-      - name: Deploy frontend via SCP
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.LIGHTSAIL_IP }}
-          username: ubuntu
-          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
-          source: "frontend/dist/*"
-          target: "~/frontend-build"
-          strip_components: 2
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.LIGHTSAIL_SSH_KEY }}" | base64 -d > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          echo "Host *" > ~/.ssh/config
+          echo "  StrictHostKeyChecking no" >> ~/.ssh/config
+          echo "  UserKnownHostsFile=/dev/null" >> ~/.ssh/config
+          chmod 600 ~/.ssh/config
 
-      - name: Deploy backend and restart
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.LIGHTSAIL_IP }}
-          username: ubuntu
-          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
-          script: |
-            sudo rm -rf /var/www/html/*
-            sudo cp -r ~/frontend-build/* /var/www/html/
+      - name: Deploy frontend
+        run: |
+          scp -r frontend/dist/* ubuntu@${{ secrets.LIGHTSAIL_IP }}:~/frontend-build/
+          ssh ubuntu@${{ secrets.LIGHTSAIL_IP }} "sudo rm -rf /var/www/html/* && sudo cp -r ~/frontend-build/* /var/www/html/"
 
-      - name: Copy backend files
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.LIGHTSAIL_IP }}
-          username: ubuntu
-          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
-          source: "backend/main.go,backend/go.mod"
-          target: "~/"
-
-      - name: Build and restart backend
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.LIGHTSAIL_IP }}
-          username: ubuntu
-          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
-          script: |
-            cd ~/backend
-            go build -o server main.go
-            sudo systemctl restart backend
+      - name: Deploy backend
+        run: |
+          scp backend/main.go backend/go.mod ubuntu@${{ secrets.LIGHTSAIL_IP }}:~/backend/
+          ssh ubuntu@${{ secrets.LIGHTSAIL_IP }} "cd ~/backend && go build -o server main.go && sudo systemctl restart backend"
