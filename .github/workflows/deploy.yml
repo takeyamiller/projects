@@ -13,33 +13,23 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Build frontend
+      - name: Setup SSH key
         run: |
-          cd frontend
-          npm install
-          npm run build
+          mkdir -p $HOME/.ssh
+          printf "%s" "$SSH_KEY" > $HOME/.ssh/id_rsa
+          chmod 600 $HOME/.ssh/id_rsa
+          ssh-keyscan -H $SERVER_IP >> $HOME/.ssh/known_hosts
+        env:
+          SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SERVER_IP: ${{ secrets.LIGHTSAIL_IP }}
 
-      - name: Setup SSH
+      - name: Deploy to server
         run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.LIGHTSAIL_SSH_KEY }}" > ~/.ssh/lightsail.pem
-          chmod 600 ~/.ssh/lightsail.pem
-          ssh-keyscan -H ${{ secrets.LIGHTSAIL_IP }} >> ~/.ssh/known_hosts
-
-      - name: Deploy frontend
-        run: |
-          scp -i ~/.ssh/lightsail.pem -r frontend/dist/* ubuntu@${{ secrets.LIGHTSAIL_IP }}:~/frontend-build/
-          ssh -i ~/.ssh/lightsail.pem ubuntu@${{ secrets.LIGHTSAIL_IP }} "sudo rm -rf /var/www/html/* && sudo cp -r ~/frontend-build/* /var/www/html/"
-
-      - name: Deploy backend
-        run: |
-          scp -i ~/.ssh/lightsail.pem backend/main.go backend/go.mod ubuntu@${{ secrets.LIGHTSAIL_IP }}:~/backend/
-          ssh -i ~/.ssh/lightsail.pem ubuntu@${{ secrets.LIGHTSAIL_IP }} "cd ~/backend && go build -o server main.go && sudo systemctl restart backend"
-
-      - name: Cleanup
-        run: rm -f ~/.ssh/lightsail.pem
+          ssh ${{ secrets.SSH_USER }}@$SERVER_IP "\
+          cd ${{ secrets.DEPLOY_PATH }} && \
+          git pull origin main && \
+          npm install && \
+          pm2 restart all || pm2 start server.js --name my-app \
+          "
+        env:
+          SERVER_IP: ${{ secrets.LIGHTSAIL_IP }}
