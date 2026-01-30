@@ -3,39 +3,52 @@ name: Deploy to Lightsail
 on:
   push:
     branches:
-      - main  # Deploy whenever you push to main
+      - main
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1 — Checkout code
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Step 2 — Setup SSH key and test connection
-      - name: Setup SSH and test connection
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build frontend
+        run: |
+          cd frontend
+          npm install
+          npm run build
+
+      - name: Setup SSH
         run: |
           mkdir -p $HOME/.ssh
           printf "%s" "$SSH_KEY" | tr -d '\r' > $HOME/.ssh/id_rsa
           chmod 600 $HOME/.ssh/id_rsa
-          ssh-keyscan -H $SERVER_IP >> $HOME/.ssh/known_hosts
-          ssh -i $HOME/.ssh/id_rsa -o StrictHostKeyChecking=no $SSH_USER@$SERVER_IP "echo SSH connection works"
+          echo "Host *" >> $HOME/.ssh/config
+          echo "  StrictHostKeyChecking no" >> $HOME/.ssh/config
+          echo "  UserKnownHostsFile=/dev/null" >> $HOME/.ssh/config
+          chmod 600 $HOME/.ssh/config
         env:
           SSH_KEY: ${{ secrets.LIGHTSAIL_SSH_KEY }}
-          SERVER_IP: ${{ secrets.LIGHTSAIL_IP }}
-          SSH_USER: ${{ secrets.SSH_USER }}
 
-      # Step 3 — Deploy app
-      - name: Deploy to server
+      - name: Deploy frontend
         run: |
-          ssh -i $HOME/.ssh/id_rsa $SSH_USER@$SERVER_IP "\
-          cd /home/ubuntu/my-app && \
-          git pull origin main && \
-          npm install && \
-          pm2 restart all || pm2 start server.js --name my-app \
-          "
+          scp -r frontend/dist/* ubuntu@${SERVER_IP}:~/frontend-build/
+          ssh ubuntu@${SERVER_IP} "sudo rm -rf /var/www/html/* && sudo cp -r ~/frontend-build/* /var/www/html/"
         env:
           SERVER_IP: ${{ secrets.LIGHTSAIL_IP }}
-          SSH_USER: ${{ secrets.SSH_USER }}
+
+      - name: Deploy backend
+        run: |
+          scp backend/main.go backend/go.mod ubuntu@${SERVER_IP}:~/backend/
+          ssh ubuntu@${SERVER_IP} "cd ~/backend && go build -o server main.go && sudo systemctl restart backend"
+        env:
+          SERVER_IP: ${{ secrets.LIGHTSAIL_IP }}
+
+      - name: Cleanup
+        run: rm -f $HOME/.ssh/id_rsa $HOME/.ssh/config
